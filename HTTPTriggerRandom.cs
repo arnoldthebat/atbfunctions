@@ -24,7 +24,7 @@ namespace uk.co.arnoldthebat.functions
             log.LogInformation("C# HTTP trigger function processed a request.");
 
             // Default response unless we have an exception
-            ExceptionCode = "Please pass a name on the query string or in the request body";
+            ExceptionCode = "Please pass a name on the query string or in the request body.";
 
             if(string.IsNullOrEmpty(APIKEY))
             {
