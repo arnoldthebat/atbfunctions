@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Net.Http;
+using System.Net;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
@@ -44,43 +46,69 @@ namespace uk.co.arnoldthebat.functions
                 }
             }
 
-            GenerateRandomNess();
-            sb = new StringBuilder().Append("\r\n");
-            foreach(int i in IntResults)
+            // create new object if needed for all method calls.
+            if(RandomJSONRPC == null)
             {
-                sb.Append(i.ToString()).Append("\r\n");
+                RandomJSONRPC = new RandomJSONRPC(APIKEY);
             }
+
+            GenerateRandomDecimalFractions();
 
             string name = req.Query["name"];
 
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             dynamic data = JsonConvert.DeserializeObject(requestBody);
             name = name ?? data?.name;
-
+            
             return name != null
-                ? (ActionResult)new OkObjectResult($"Random Numbers are; {sb.ToString()}")
+                ? (ActionResult)new OkObjectResult(JsonString) // can use JsonResult to force header
                 : new BadRequestObjectResult(ExceptionCode);
         }
 
-        private static void GenerateRandomNess()
+        private static void GenerateRandomDecimalFractions()
         {
-            org.random.JSONRPC.RandomJSONRPC TestRandomJSONRPC = new RandomJSONRPC(APIKEY);
-
-            var n =  new Random().Next(1, 100);
-            var min = new Random().Next(1, 1000000000);
-            var max = new Random().Next(min, 1000000000);
-            
-            IntResults = TestRandomJSONRPC.GenerateIntegers(n, min, max); 
+            ResultObject resultObject = new ResultObject();
+            resultObject.DecimalResults = RandomJSONRPC.GenerateDecimalFractions(10, 4);
+            resultObject.GetBitsLeft = RandomJSONRPC.GetBitsLeft();
+            resultObject.GetHashedAPIKey = RandomJSONRPC.GetHashedAPIKey;
+            resultObject.GetSignature = RandomJSONRPC.GetSignature;
+            resultObject.MethodName = nameof(RandomJSONRPC.GenerateDecimalFractions);
+            JsonString = JsonConvert.SerializeObject(resultObject, Formatting.Indented);
         }
+        
+        private static string JsonString { get; set; }
+
+        private static RandomJSONRPC RandomJSONRPC { get; set; }
 
         private static int[] IntResults { get; set; }
 
-        private static string APIKEY {get; set;}
+        private static string[] StrResults { get; set; }
 
-        private static string ExceptionCode {get; set;}
+        private static double[] DoubleResults { get; set; }
+
+        private static Guid[] GuidResults { get; set; }
+
+        private static string APIKEY { get; set;}
+
+        private static string ExceptionCode { get; set;}
 
         private static string KeyVaultEndpoint = "https://atbfunctionkeys.vault.azure.net";
 
-        private static StringBuilder sb {get; set;}
+        private static StringBuilder sb { get; set;}
+
+        /// <summary>
+        /// ResultObject - needs to remain public to allow JsonConvert.SerializeObject to use reflection on the object
+        /// </summary>
+        public class ResultObject
+        {
+            public string MethodName { get; set;}
+            public double[] DecimalResults { get; set;}
+
+            public int GetBitsLeft { get; set;}
+
+            public string GetHashedAPIKey { get; set;}
+
+            public string GetSignature { get; set;}
+        }
     }
 }
