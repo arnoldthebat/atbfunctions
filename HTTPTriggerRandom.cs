@@ -52,22 +52,30 @@ namespace uk.co.arnoldthebat.functions
                 RandomJSONRPC = new RandomJSONRPC(APIKEY);
             }
 
-            GenerateRandomDecimalFractions();
+            string methodName = req.Query["methodName"].ToString().ToLower();
 
-            string name = req.Query["name"];
+            // https://stackoverflow.com/questions/94305/what-is-quicker-switch-on-string-or-elseif-on-type 
+            // if else faster that switch for small number of cases.
+            if(string.Equals(methodName, nameof(RandomJSONRPC.GenerateDecimalFractions).ToLower()))
+            {
+                GenerateRandomDecimalFractions();
+            } else
+            {
+                methodName = null;
+            }
 
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             dynamic data = JsonConvert.DeserializeObject(requestBody);
-            name = name ?? data?.name;
+            methodName = methodName ?? data?.name;
             
-            return name != null
+            return methodName != null
                 ? (ActionResult)new OkObjectResult(JsonString) // can use JsonResult to force header
                 : new BadRequestObjectResult(ExceptionCode);
         }
 
         private static void GenerateRandomDecimalFractions()
         {
-            ResultObject resultObject = new ResultObject();
+            DoubleResult resultObject = new DoubleResult();
             resultObject.DecimalResults = RandomJSONRPC.GenerateDecimalFractions(10, 4);
             resultObject.GetBitsLeft = RandomJSONRPC.GetBitsLeft();
             resultObject.GetHashedAPIKey = RandomJSONRPC.GetHashedAPIKey;
@@ -75,6 +83,8 @@ namespace uk.co.arnoldthebat.functions
             resultObject.MethodName = nameof(RandomJSONRPC.GenerateDecimalFractions);
             JsonString = JsonConvert.SerializeObject(resultObject, Formatting.Indented);
         }
+
+        private const string GenerateDecimalFractions = nameof(RandomJSONRPC.GenerateDecimalFractions);
         
         private static string JsonString { get; set; }
 
@@ -103,11 +113,8 @@ namespace uk.co.arnoldthebat.functions
         {
             public string MethodName { get; set;}
             public double[] DecimalResults { get; set;}
-
             public int GetBitsLeft { get; set;}
-
             public string GetHashedAPIKey { get; set;}
-
             public string GetSignature { get; set;}
         }
     }
