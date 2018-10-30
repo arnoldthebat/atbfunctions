@@ -103,19 +103,5 @@ namespace uk.co.arnoldthebat.functions
         private static string ExceptionCode { get; set;}
 
         private static string KeyVaultEndpoint = "https://atbfunctionkeys.vault.azure.net";
-
-        private static StringBuilder sb { get; set;}
-
-        /// <summary>
-        /// ResultObject - needs to remain public to allow JsonConvert.SerializeObject to use reflection on the object
-        /// </summary>
-        public class ResultObject
-        {
-            public string MethodName { get; set;}
-            public double[] DecimalResults { get; set;}
-            public int GetBitsLeft { get; set;}
-            public string GetHashedAPIKey { get; set;}
-            public string GetSignature { get; set;}
-        }
     }
 }

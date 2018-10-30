@@ -2,6 +2,9 @@ using System;
 
 namespace uk.co.arnoldthebat.functions
 {
+    /// <summary>
+        /// ResultObject - needs to remain public to allow JsonConvert.SerializeObject to use reflection on the object
+        /// </summary>
     public abstract class ResultBase
     {
         public string MethodName { get; set;}
