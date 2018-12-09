@@ -9,6 +9,7 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Text;
 using Microsoft.Azure.Services.AppAuthentication;
 using Microsoft.Azure.KeyVault;
@@ -24,9 +25,8 @@ namespace uk.co.arnoldthebat.functions
             ILogger log)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
-
-            // Default response unless we have an exception
-            ExceptionCode = "Please pass a name on the query string or in the request body.";
+            // Default state
+            ExceptionCode = "OK";
 
             if(string.IsNullOrEmpty(APIKEY))
             {
@@ -43,6 +43,7 @@ namespace uk.co.arnoldthebat.functions
                     APIKEY = null;
                     ExceptionCode = exp.Message;
                     log.LogError(exp.Message);
+                    return new BadRequestObjectResult("API KEY Failed to set: " + ExceptionCode);
                 }
             }
 
@@ -52,40 +53,59 @@ namespace uk.co.arnoldthebat.functions
                 RandomJSONRPC = new RandomJSONRPC(APIKEY);
             }
 
-            string methodName = req.Query["methodName"].ToString().ToLower();
+            // Extract Query Values
+            string methodName = req.Query[nameof(methodName)].ToString().ToLower();
+            int numberOfResults = ParseInt(req.Query[nameof(numberOfResults)].ToString(), nameof(numberOfResults));
+
+            // Shouldnt be needed since we never send a body. Its (currently) always in the query. Test this with Postmaster
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            dynamic data = JsonConvert.DeserializeObject(requestBody);
+            methodName = methodName ?? data?.methodName;
 
             // https://stackoverflow.com/questions/94305/what-is-quicker-switch-on-string-or-elseif-on-type 
             // if else faster that switch for small number of cases.
-            if(string.Equals(methodName, nameof(RandomJSONRPC.GenerateDecimalFractions).ToLower()))
+            try 
             {
-                GenerateRandomDecimalFractions();
-            } else
+                if(string.Equals(methodName, nameof(RandomJSONRPC.GenerateDecimalFractions).ToLower()))
+                {
+                    GenerateRandomDecimalFractions(numberOfResults);
+                } else
+                {
+                    methodName = null;
+                }
+            }
+            catch (Exception exp)
             {
+                ExceptionCode = exp.Message;
+                log.LogError(exp.Message);
                 methodName = null;
             }
-
-            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            dynamic data = JsonConvert.DeserializeObject(requestBody);
-            methodName = methodName ?? data?.name;
             
             return methodName != null
                 ? (ActionResult)new OkObjectResult(JsonString) // can use JsonResult to force header
-                : new BadRequestObjectResult(ExceptionCode);
+                : new BadRequestObjectResult("Please pass a methodName on the query string or in the request body.");
         }
 
-        private static void GenerateRandomDecimalFractions()
+        private static void GenerateRandomDecimalFractions(int n)
         {
-            DoubleResult resultObject = new DoubleResult();
-            resultObject.DecimalResults = RandomJSONRPC.GenerateDecimalFractions(10, 4);
-            resultObject.GetBitsLeft = RandomJSONRPC.GetBitsLeft();
-            resultObject.GetHashedAPIKey = RandomJSONRPC.GetHashedAPIKey;
-            resultObject.GetSignature = RandomJSONRPC.GetSignature;
-            resultObject.MethodName = nameof(RandomJSONRPC.GenerateDecimalFractions);
-            JsonString = JsonConvert.SerializeObject(resultObject, Formatting.Indented);
+            JObject jObject = new JObject();
+            try 
+            {
+                RandomJSONRPC.GenerateDecimalFractions(n, 4);
+                jObject.Add(new JProperty(nameof(RandomJSONRPC.GenerateDecimalFractions), RandomJSONRPC.JSONResponse));
+                jObject.Add(nameof(ExceptionCode), ExceptionCode);
+            }
+            catch (Exception exp)
+            {
+                jObject.Add(new JProperty(nameof(RandomJSONRPC.GenerateDecimalFractions), "Error"));
+                jObject.Add(nameof(ExceptionCode), exp.Message);
+            }
+            finally
+            {
+                JsonString = JsonConvert.SerializeObject(jObject,  Formatting.Indented);
+            }
         }
-
-        private const string GenerateDecimalFractions = nameof(RandomJSONRPC.GenerateDecimalFractions);
-        
+    
         private static string JsonString { get; set; }
 
         private static RandomJSONRPC RandomJSONRPC { get; set; }
@@ -98,10 +118,23 @@ namespace uk.co.arnoldthebat.functions
 
         private static Guid[] GuidResults { get; set; }
 
-        private static string APIKEY { get; set;}
+        private static string APIKEY { get; set; }
 
-        private static string ExceptionCode { get; set;}
+        private static string ExceptionCode { get; set; }
 
         private static string KeyVaultEndpoint = "https://atbfunctionkeys.vault.azure.net";
+
+        private static int ParseInt(string stringValue, string methodName)
+        {
+            try 
+            {
+                return Convert.ToInt32(stringValue);
+            }
+            catch
+            {
+                ExceptionCode = "Failed to convert parameter " + methodName + " to Int, defaulting to 10";
+                return 10;
+            }
+        }
     }
 }
