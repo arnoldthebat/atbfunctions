@@ -46,7 +46,7 @@ namespace uk.co.arnoldthebat.functions
                 }
             }
 
-            // create new object if needed for all method calls.
+            // Create new object if needed for all method calls.
             if(RandomJSONRPC == null)
             {
                 RandomJSONRPC = new RandomJSONRPC(APIKEY);
