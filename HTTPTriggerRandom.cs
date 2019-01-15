@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Text;
+using System.Collections.Generic;
 using Microsoft.Azure.Services.AppAuthentication;
 using Microsoft.Azure.KeyVault;
 using org.random.JSONRPC;
@@ -25,8 +26,8 @@ namespace uk.co.arnoldthebat.functions
             ILogger log)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
-            // Default state
-            ExceptionCode = "OK";
+            // Default state - reset exceptions for each trigger invocation;
+            ExceptionCodes = new List<string>();
 
             if(string.IsNullOrEmpty(APIKEY))
             {
@@ -41,9 +42,9 @@ namespace uk.co.arnoldthebat.functions
                 catch (Exception exp)
                 {
                     APIKEY = null;
-                    ExceptionCode = exp.Message;
+                    // ExceptionCodes.Add(exp.Message);
                     log.LogError(exp.Message);
-                    return new BadRequestObjectResult("API KEY Failed to set: " + ExceptionCode);
+                    return new BadRequestObjectResult("API KEY Failed to set: " + exp.Message);
                 }
             }
 
@@ -56,6 +57,7 @@ namespace uk.co.arnoldthebat.functions
             // Extract Query Values
             string methodName = req.Query[nameof(methodName)].ToString().ToLower();
             int numberOfResults = ParseInt(req.Query[nameof(numberOfResults)].ToString(), nameof(numberOfResults));
+            int decimalPlaces = ParseInt(req.Query[nameof(decimalPlaces)].ToString(), nameof(decimalPlaces));
 
             // Shouldnt be needed since we never send a body. Its (currently) always in the query. Test this with Postmaster
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
@@ -68,7 +70,7 @@ namespace uk.co.arnoldthebat.functions
             {
                 if(string.Equals(methodName, nameof(RandomJSONRPC.GenerateDecimalFractions).ToLower()))
                 {
-                    GenerateRandomDecimalFractions(numberOfResults);
+                    GenerateRandomDecimalFractions(numberOfResults, decimalPlaces);
                 } else
                 {
                     methodName = null;
@@ -76,7 +78,7 @@ namespace uk.co.arnoldthebat.functions
             }
             catch (Exception exp)
             {
-                ExceptionCode = exp.Message;
+                ExceptionCodes.Add(exp.Message); // TODO: Add this to the BadRequestObjectResult
                 log.LogError(exp.Message);
                 methodName = null;
             }
@@ -86,19 +88,21 @@ namespace uk.co.arnoldthebat.functions
                 : new BadRequestObjectResult("Please pass a methodName on the query string or in the request body.");
         }
 
-        private static void GenerateRandomDecimalFractions(int n)
+        private static void GenerateRandomDecimalFractions(int numberOfResults, int decimalPlaces)
         {
             JObject jObject = new JObject();
             try 
             {
-                RandomJSONRPC.GenerateDecimalFractions(n, 4);
+                RandomJSONRPC.GenerateDecimalFractions(numberOfResults, decimalPlaces);
                 jObject.Add(new JProperty(nameof(RandomJSONRPC.GenerateDecimalFractions), RandomJSONRPC.JSONResponse));
-                jObject.Add(nameof(ExceptionCode), ExceptionCode);
+                jObject.Add(new JProperty(nameof(ExceptionCodes), 
+                    new JArray(ExceptionCodes)));
+                
             }
             catch (Exception exp)
             {
                 jObject.Add(new JProperty(nameof(RandomJSONRPC.GenerateDecimalFractions), "Error"));
-                jObject.Add(nameof(ExceptionCode), exp.Message);
+                jObject.Add(nameof(ExceptionCodes), exp.Message);
             }
             finally
             {
@@ -120,9 +124,11 @@ namespace uk.co.arnoldthebat.functions
 
         private static string APIKEY { get; set; }
 
-        private static string ExceptionCode { get; set; }
+        private static List<string> ExceptionCodes { get; set; }
 
         private static string KeyVaultEndpoint = "https://atbfunctionkeys.vault.azure.net";
+
+        private static int sensibleDefaultInt = 2;
 
         private static int ParseInt(string stringValue, string methodName)
         {
@@ -132,8 +138,9 @@ namespace uk.co.arnoldthebat.functions
             }
             catch
             {
-                ExceptionCode = "Failed to convert parameter " + methodName + " to Int, defaulting to 10";
-                return 10;
+                ExceptionCodes.Add("Failed to convert parameter " + methodName + " to Int, defaulting to " 
+                    + sensibleDefaultInt + ".");
+                return sensibleDefaultInt;
             }
         }
     }
