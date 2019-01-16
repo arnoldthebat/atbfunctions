@@ -57,7 +57,6 @@ namespace uk.co.arnoldthebat.functions
             // Extract Query Values
             string methodName = req.Query[nameof(methodName)].ToString().ToLower();
             int numberOfResults = ParseInt(req.Query[nameof(numberOfResults)].ToString(), nameof(numberOfResults));
-            int decimalPlaces = ParseInt(req.Query[nameof(decimalPlaces)].ToString(), nameof(decimalPlaces));
 
             // Shouldnt be needed since we never send a body. Its (currently) always in the query. Test this with Postmaster
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
@@ -65,13 +64,20 @@ namespace uk.co.arnoldthebat.functions
             methodName = methodName ?? data?.methodName;
 
             // https://stackoverflow.com/questions/94305/what-is-quicker-switch-on-string-or-elseif-on-type 
-            // if else faster that switch for small number of cases.
+            // if else faster that switch for small number of cases. Plus case expects constants...
             try 
             {
                 if(string.Equals(methodName, nameof(RandomJSONRPC.GenerateDecimalFractions).ToLower()))
                 {
+                    int decimalPlaces = ParseInt(req.Query[nameof(decimalPlaces)].ToString(), nameof(decimalPlaces));
                     GenerateRandomDecimalFractions(numberOfResults, decimalPlaces);
-                } else
+                } else if (string.Equals(methodName, nameof(RandomJSONRPC.GenerateIntegers).ToLower()))
+                {
+                    int minInt = ParseInt(req.Query[nameof(minInt)].ToString(), nameof(minInt), 0);
+                    int maxInt = ParseInt(req.Query[nameof(maxInt)].ToString(), nameof(maxInt), 10);
+                    GenerateRandomIntegers(numberOfResults, minInt, maxInt);
+                } 
+                else
                 {
                     methodName = null;
                 }
@@ -90,23 +96,43 @@ namespace uk.co.arnoldthebat.functions
 
         private static void GenerateRandomDecimalFractions(int numberOfResults, int decimalPlaces)
         {
-            JObject jObject = new JObject();
+            ResultObject resultObject = new ResultObject();
             try 
             {
                 RandomJSONRPC.GenerateDecimalFractions(numberOfResults, decimalPlaces);
-                jObject.Add(new JProperty(nameof(RandomJSONRPC.GenerateDecimalFractions), RandomJSONRPC.JSONResponse));
-                jObject.Add(new JProperty(nameof(ExceptionCodes), 
-                    new JArray(ExceptionCodes)));
+                resultObject.LoadValidObjectResponse(nameof(RandomJSONRPC.GenerateDecimalFractions), RandomJSONRPC.JSONResponse,
+                    nameof(ExceptionCodes), ExceptionCodes);
                 
             }
             catch (Exception exp)
             {
-                jObject.Add(new JProperty(nameof(RandomJSONRPC.GenerateDecimalFractions), "Error"));
-                jObject.Add(nameof(ExceptionCodes), exp.Message);
+                resultObject.LoadInvalidObjectResponse(nameof(RandomJSONRPC.GenerateDecimalFractions), 
+                    nameof(ExceptionCodes), exp.Message);
             }
             finally
             {
-                JsonString = JsonConvert.SerializeObject(jObject,  Formatting.Indented);
+                JsonString = resultObject.GetJSONResponse();
+            }
+        }
+
+        private static void GenerateRandomIntegers(int numberOfResults, int minInt, int maxInt)
+        {
+            ResultObject resultObject = new ResultObject();
+            try 
+            {
+                RandomJSONRPC.GenerateIntegers(numberOfResults, minInt, maxInt);
+                resultObject.LoadValidObjectResponse(nameof(RandomJSONRPC.GenerateIntegers), RandomJSONRPC.JSONResponse,
+                    nameof(ExceptionCodes), ExceptionCodes);
+                
+            }
+            catch (Exception exp)
+            {
+                resultObject.LoadInvalidObjectResponse(nameof(RandomJSONRPC.GenerateIntegers), 
+                    nameof(ExceptionCodes), exp.Message);
+            }
+            finally
+            {
+                JsonString = resultObject.GetJSONResponse();
             }
         }
     
@@ -132,6 +158,11 @@ namespace uk.co.arnoldthebat.functions
 
         private static int ParseInt(string stringValue, string methodName)
         {
+            return ParseInt(stringValue, methodName, sensibleDefaultInt);
+        }
+
+        private static int ParseInt(string stringValue, string methodName, int defaultValue)
+        {
             try 
             {
                 return Convert.ToInt32(stringValue);
@@ -139,8 +170,8 @@ namespace uk.co.arnoldthebat.functions
             catch
             {
                 ExceptionCodes.Add("Failed to convert parameter " + methodName + " to Int, defaulting to " 
-                    + sensibleDefaultInt + ".");
-                return sensibleDefaultInt;
+                    + defaultValue + ".");
+                return defaultValue;
             }
         }
     }
